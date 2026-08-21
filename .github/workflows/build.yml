@@ -27,7 +27,7 @@ jobs:
           chmod +x src/kernel/drivers/huawei_platform/oases/inlinehook_gen_off 2>/dev/null || true
           # Huawei source is missing linux/netfilter/xt_mark.h (only xt_MARK.h exists); restore from upstream
           curl -Ls -o src/kernel/include/uapi/linux/netfilter/xt_mark.h \
-            "https://raw.githubusercontent.com/torvalds/linux/v4.4.23/include/uapi/linux/netfilter/xt_mark.h"
+            "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/xt_mark.h"
           grep -q "NFMARK" src/kernel/include/uapi/linux/netfilter/xt_mark.h && echo "[+] xt_mark.h restored"
           ls -la src/kernel | head
         env:
