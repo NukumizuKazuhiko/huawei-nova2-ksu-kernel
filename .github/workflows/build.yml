@@ -59,6 +59,8 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/toolchain/bin:$PATH"
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
+          # GCC10+ defaults to -fno-common, breaking old dtc (multiple definition of yylloc)
+          export HOSTCFLAGS="-fcommon"
           mkdir -p ../out
           make O=../out merge_hi6250_defconfig
           make O=../out -j$(nproc) Image.gz
