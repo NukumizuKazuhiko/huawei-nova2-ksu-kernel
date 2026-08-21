@@ -25,10 +25,12 @@ jobs:
           find src -type f \( -name '*.sh' -o -name '*.pl' -o -name '*.py' -o -name 'gen_*' -o -name '*_gen_*' \) -exec chmod +x {} + 2>/dev/null || true
           find src/kernel/scripts src/kernel/arch -type f \( -name 'mk*' -o -name '*config' -o -name 'check*' -o -name 'build*' \) -exec chmod +x {} + 2>/dev/null || true
           chmod +x src/kernel/drivers/huawei_platform/oases/inlinehook_gen_off 2>/dev/null || true
-          # Huawei source is missing linux/netfilter/xt_mark.h (only xt_MARK.h exists); restore from upstream
-          curl -Ls -o src/kernel/include/uapi/linux/netfilter/xt_mark.h \
-            "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/xt_mark.h"
-          grep -q "NFMARK" src/kernel/include/uapi/linux/netfilter/xt_mark.h && echo "[+] xt_mark.h restored"
+          # Huawei source is missing/broken these netfilter uapi headers; restore from upstream v4.4
+          for h in xt_mark xt_connmark; do
+            curl -Ls -o "src/kernel/include/uapi/linux/netfilter/$h.h" \
+              "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/$h.h"
+          done
+          grep -q "xt_connmark_tginfo1" src/kernel/include/uapi/linux/netfilter/xt_connmark.h && echo "[+] netfilter uapi headers restored"
           ls -la src/kernel | head
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || 'v4.4.23-sukisu' }}
