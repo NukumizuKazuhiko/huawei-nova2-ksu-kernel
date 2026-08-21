@@ -7,12 +7,25 @@ KSU=drivers/kernelsu
 echo "[+] Patching SukiSU for 4.4 compatibility..."
 
 # --- 1. fallthrough macro (GCC <7 / kernels <5.10) ---
-if ! grep -q "^#define fallthrough" "$KSU/kernel_includes.h"; then
-    sed -i 's|^#define __KSU_H_KERNEL_INCLUDES|#define __KSU_H_KERNEL_INCLUDES\n\n#ifndef fallthrough\n#define fallthrough\ndo {} while (0)  /* fall through */\n#endif|' "$KSU/kernel_includes.h"
-    echo "  [OK] fallthrough macro added"
-else
-    echo "  [--] fallthrough already present"
-fi
+python - <<'EOF'
+import io
+
+path = 'drivers/kernelsu/kernel_includes.h'
+with io.open(path, 'r', encoding='utf-8') as f:
+    c = f.read()
+if 'define fallthrough' not in c:
+    guard = '#define __KSU_H_KERNEL_INCLUDES'
+    macro = (guard + '\n\n'
+             '#ifndef fallthrough\n'
+             '#define fallthrough do {} while (0)  /* fall through */\n'
+             '#endif')
+    c = c.replace(guard, macro, 1)
+    with io.open(path, 'w', encoding='utf-8') as f:
+        f.write(c)
+    print('  [OK] fallthrough macro added')
+else:
+    print('  [--] fallthrough already present')
+EOF
 
 # --- 2. selinux_hide (5.10+ only): gate calls in ksud.c ---
 python - <<'EOF'
