@@ -1,0 +1,17 @@
+kernel/KernelSU/
+kernel/out/
+kernel/.config
+kernel/.version
+kernel/include/generated/
+kernel/arch/*/include/generated/
+*.o
+*.ko
+*.cmd
+*.mod
+*.mod.c
+*.tmp
+*.symtypes
+*.order
+*.markers
+modules.order
+Module.symvers

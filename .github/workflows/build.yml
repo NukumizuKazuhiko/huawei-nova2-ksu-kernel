@@ -1,0 +1,86 @@
+name: Build Kernel
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Download kernel source from Release
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          gh release download "$RELEASE_TAG" --pattern "*.tar.gz" --dir . \
+            --repo "${{ github.repository }}"
+          mkdir -p src
+          tar -xzf kernel_*.tar.gz -C src
+          ls -la src/kernel | head
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || 'v4.4.23-sukisu' }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git make gcc libncurses5-dev libssl-dev \
+            flex bison bc kmod cpio device-tree-compiler python2 \
+            gcc-arm-none-eabi 2>/dev/null || true
+
+      - name: Download aarch64-linux-android-4.9 toolchain
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git clone --depth 1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 \
+            toolchain 2>/dev/null || \
+          git clone --depth 1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain
+          ls toolchain/bin/
+
+      - name: Integrate SukiSU
+        run: |
+          cd "$GITHUB_WORKSPACE/src/kernel"
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          # ensure defconfig has KPROBES + KSU (in case upstream defconfig differs)
+          grep -q "^CONFIG_KPROBES=y" arch/arm64/configs/merge_hi6250_defconfig || \
+            sed -i 's/^# CONFIG_KPROBES is not set/CONFIG_KPROBES=y/' arch/arm64/configs/merge_hi6250_defconfig
+          grep -q "^CONFIG_KSU=y" arch/arm64/configs/merge_hi6250_defconfig || \
+            echo "CONFIG_KSU=y" >> arch/arm64/configs/merge_hi6250_defconfig
+
+      - name: Build kernel
+        run: |
+          cd "$GITHUB_WORKSPACE/src/kernel"
+          export PATH="$GITHUB_WORKSPACE/toolchain/bin:$PATH"
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-android-
+          mkdir -p ../out
+          make O=../out merge_hi6250_defconfig
+          make O=../out -j$(nproc) Image.gz
+
+      - name: Collect artifacts
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p dist
+          cp src/out/arch/arm64/boot/Image.gz dist/ 2>/dev/null || true
+          cp src/out/arch/arm64/boot/zImage* dist/ 2>/dev/null || true
+          ls -la dist/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-images
+          path: dist/
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          for f in dist/*; do
+            gh release upload "${{ github.event.release.tag_name }}" "$f" --repo "${{ github.repository }}" || true
+          done
