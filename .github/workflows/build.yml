@@ -17,17 +17,28 @@ jobs:
       - name: Download kernel source from Release
         run: |
           cd "$GITHUB_WORKSPACE"
-          gh release download "$RELEASE_TAG" --pattern "kernel_4.4.23_v3.tar.gz" --dir . \
+          gh release download "$RELEASE_TAG" --pattern "kernel_4.4.23_v4.tar.gz" --dir . \
             --repo "${{ github.repository }}"
           mkdir -p src
-          tar -xzf kernel_4.4.23_v3.tar.gz -C src
+          tar -xzf kernel_4.4.23_v4.tar.gz -C src
           # package top dir is "newkernel"; normalize to "kernel"
           if [ -d src/newkernel ] && [ ! -d src/kernel ]; then mv src/newkernel src/kernel; fi
           # Windows-created tarballs lose exec bits; restore them broadly
           find src -type f \( -name '*.sh' -o -name '*.pl' -o -name '*.py' -o -name 'gen_*' -o -name '*_gen_*' \) -exec chmod +x {} + 2>/dev/null || true
           find src/kernel/scripts src/kernel/arch -type f \( -name 'mk*' -o -name '*config' -o -name 'check*' -o -name 'build*' \) -exec chmod +x {} + 2>/dev/null || true
           chmod +x src/kernel/drivers/huawei_platform/oases/inlinehook_gen_off 2>/dev/null || true
-          # (netfilter uapi headers already fixed in the release tarball)
+          # Windows is case-insensitive: UPPERCASE-named netfilter headers need lowercase aliases on ext4
+          for d in src/kernel/include/uapi/linux/netfilter src/kernel/include/uapi/linux/netfilter_ipv4 src/kernel/include/uapi/linux/netfilter_ipv6; do
+            for f in "$d"/xt_*.h "$d"/ipt_*.h "$d"/ip6t_*.h; do
+              [ -e "$f" ] || continue
+              base=$(basename "$f")
+              lc=$(echo "$base" | tr 'A-Z' 'a-z')
+              if [ "$base" != "$lc" ] && [ ! -e "$d/$lc" ]; then
+                cp "$f" "$d/$lc"
+                echo "[+] alias $base -> $lc"
+              fi
+            done
+          done
           echo "[+] kernel source ready"
           # Huawei renamed several netfilter uapi headers to UPPERCASE but .c files include lowercase;
           # create lowercase symlinks/copies so includes resolve on case-sensitive ext4
