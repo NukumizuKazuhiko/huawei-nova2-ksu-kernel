@@ -25,12 +25,35 @@ jobs:
           find src -type f \( -name '*.sh' -o -name '*.pl' -o -name '*.py' -o -name 'gen_*' -o -name '*_gen_*' \) -exec chmod +x {} + 2>/dev/null || true
           find src/kernel/scripts src/kernel/arch -type f \( -name 'mk*' -o -name '*config' -o -name 'check*' -o -name 'build*' \) -exec chmod +x {} + 2>/dev/null || true
           chmod +x src/kernel/drivers/huawei_platform/oases/inlinehook_gen_off 2>/dev/null || true
-          # Huawei source is missing/broken these netfilter uapi headers; restore from upstream v4.4
-          for h in xt_mark xt_connmark; do
-            curl -Ls -o "src/kernel/include/uapi/linux/netfilter/$h.h" \
-              "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/$h.h"
+          # Huawei gutted/renamed some netfilter uapi headers; restore specific broken ones from upstream v4.4
+          # and fetch any still-missing canonical headers (keep Huawei-specific files intact)
+          mkdir -p src/kernel/include/uapi/linux/netfilter
+          for h in $(curl -Ls "https://api.github.com/repos/torvalds/linux/contents/include/uapi/linux/netfilter?ref=v4.4" | grep '"name"' | sed -E 's/.*"name": "([^"]+)".*/\1/' | grep '\.h$'); do
+            dst="src/kernel/include/uapi/linux/netfilter/$h"
+            # overwrite: known-broken stubs / missing files; keep Huawei-specific contents otherwise
+            case "$h" in
+              xt_connmark.h|xt_DSCP.h)
+                curl -Ls -o "$dst" "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/$h"
+                echo "[+] restored $h"
+                ;;
+              *)
+                if [ ! -f "$dst" ] || grep -q "include <linux/netfilter/$h>" "$dst" 2>/dev/null; then
+                  curl -Ls -o "$dst" "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/$h"
+                  echo "[+] restored missing $h"
+                fi
+                ;;
+            esac
           done
-          grep -q "xt_connmark_tginfo1" src/kernel/include/uapi/linux/netfilter/xt_connmark.h && echo "[+] netfilter uapi headers restored"
+          # create lowercase aliases for UPPERCASE-named headers (case-sensitive FS)
+          cd src/kernel/include/uapi/linux/netfilter
+          for f in xt_*.h; do
+            lc=$(echo "$f" | tr 'A-Z' 'a-z')
+            if [ "$f" != "$lc" ] && [ ! -e "$lc" ]; then
+              cp "$f" "$lc"
+              echo "[+] lowercase alias: $f -> $lc"
+            fi
+          done
+          cd "$GITHUB_WORKSPACE"
           # Huawei renamed several netfilter uapi headers to UPPERCASE but .c files include lowercase;
           # create lowercase symlinks/copies so includes resolve on case-sensitive ext4
           cd src/kernel/include/uapi/linux/netfilter
