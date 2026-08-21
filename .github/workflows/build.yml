@@ -62,6 +62,9 @@ jobs:
             sed -i 's/^# CONFIG_KPROBES is not set/CONFIG_KPROBES=y/' arch/arm64/configs/merge_hi6250_defconfig
           grep -q "^CONFIG_KSU=y" arch/arm64/configs/merge_hi6250_defconfig || \
             echo "CONFIG_KSU=y" >> arch/arm64/configs/merge_hi6250_defconfig
+          # apply 4.4 compatibility patch (script lives in repo root)
+          bash "$GITHUB_WORKSPACE/patch-4.4.sh"
+          echo "[+] SukiSU integrated + patched for 4.4"
 
       - name: Build kernel
         run: |
