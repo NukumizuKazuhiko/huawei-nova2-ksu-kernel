@@ -78,6 +78,8 @@ jobs:
           # GCC10+ defaults to -fno-common, breaking old dtc (multiple definition of yylloc)
           sed -i 's/^HOSTCFLAGS_DTC := -I$(src) -I$(src)\/libfdt/HOSTCFLAGS_DTC := -fcommon -I$(src) -I$(src)\/libfdt/' scripts/dtc/Makefile
           make O=../out merge_hi6250_defconfig
+          # Huawei dropped xt_DSCP.c (target); ensure it stays off in generated .config
+          ./scripts/config --file ../out/.config --disable NETFILTER_XT_TARGET_DSCP
           make O=../out -j$(nproc) Image.gz
 
       - name: Collect artifacts
