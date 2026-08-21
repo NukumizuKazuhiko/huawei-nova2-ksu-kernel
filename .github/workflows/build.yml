@@ -31,6 +31,17 @@ jobs:
               "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/$h.h"
           done
           grep -q "xt_connmark_tginfo1" src/kernel/include/uapi/linux/netfilter/xt_connmark.h && echo "[+] netfilter uapi headers restored"
+          # Huawei renamed several netfilter uapi headers to UPPERCASE but .c files include lowercase;
+          # create lowercase symlinks/copies so includes resolve on case-sensitive ext4
+          cd src/kernel/include/uapi/linux/netfilter
+          for f in xt_*.h; do
+            lc=$(echo "$f" | tr 'A-Z' 'a-z')
+            if [ "$f" != "$lc" ] && [ ! -e "$lc" ]; then
+              cp "$f" "$lc"
+              echo "[+] lowercase alias: $f -> $lc"
+            fi
+          done
+          cd "$GITHUB_WORKSPACE"
           ls -la src/kernel | head
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || 'v4.4.23-sukisu' }}
