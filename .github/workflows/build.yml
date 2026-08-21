@@ -17,10 +17,10 @@ jobs:
       - name: Download kernel source from Release
         run: |
           cd "$GITHUB_WORKSPACE"
-          gh release download "$RELEASE_TAG" --pattern "kernel_4.4.23_v2.tar.gz" --dir . \
+          gh release download "$RELEASE_TAG" --pattern "kernel_4.4.23_v3.tar.gz" --dir . \
             --repo "${{ github.repository }}"
           mkdir -p src
-          tar -xzf kernel_4.4.23_v2.tar.gz -C src
+          tar -xzf kernel_4.4.23_v3.tar.gz -C src
           # package top dir is "newkernel"; normalize to "kernel"
           if [ -d src/newkernel ] && [ ! -d src/kernel ]; then mv src/newkernel src/kernel; fi
           # Windows-created tarballs lose exec bits; restore them broadly
@@ -89,7 +89,7 @@ jobs:
           make O=../out merge_hi6250_defconfig
           # Huawei has no xt_DSCP.c source; keep target off in generated .config
           ./scripts/config --file ../out/.config --disable NETFILTER_XT_TARGET_DSCP
-          make O=../out -j$(nproc) Image.gz
+          make O=../out -j2 Image.gz
 
       - name: Collect artifacts
         run: |
