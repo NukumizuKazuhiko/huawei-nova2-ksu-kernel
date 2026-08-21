@@ -90,48 +90,7 @@ jobs:
           # Huawei ships xt_dscp.c (match) but Makefile also wants xt_DSCP.o (target, no source); disable it
           sed -i 's/^CONFIG_NETFILTER_XT_TARGET_DSCP=y/# CONFIG_NETFILTER_XT_TARGET_DSCP is not set/' arch/arm64/configs/merge_hi6250_defconfig
           # Huawei 4.4 has no current_security() macro; use current_cred()->security directly
-          sed -i 's/const struct task_security_struct \*tsec = current_security();/const struct task_security_struct *tsec = (const struct task_security_struct *)current_cred()->security;/' drivers/kernelsu/selinux/selinux.c
-          grep -q "current_cred()->security" drivers/kernelsu/selinux/selinux.c && echo "[OK] selinux current_security patched" || echo "[WARN] current_security patch did not apply"
-          # Huawei 4.4 groups_sort() is static (not exported); inline a shell sort for <4.9 kernels
-          python3 - <<'EOF'
-import re
-p = 'drivers/kernelsu/core_hook.c'
-c = open(p).read()
-needle = '\tgroups_sort(group_info);\n\tset_groups(cred, group_info);'
-repl = """#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
-	{
-		/* groups_sort is static in kernel/groups.c on 4.4; inline a simple shell sort */
-		int base, max, stride;
-		int gidsetsize = group_info->ngroups;
-		for (stride = 1; stride < gidsetsize; stride = 3 * stride + 1) ;
-		stride /= 3;
-		while (stride) {
-			max = gidsetsize - stride;
-			for (base = 0; base < max; base++) {
-				int left = base;
-				int right = left + stride;
-				kgid_t tmp = GROUP_AT(group_info, right);
-				while (left >= 0 && gid_gt(GROUP_AT(group_info, left), tmp)) {
-					GROUP_AT(group_info, right) = GROUP_AT(group_info, left);
-					right = left;
-					left -= stride;
-				}
-				GROUP_AT(group_info, right) = tmp;
-			}
-			stride /= 3;
-		}
-	}
-#else
-	groups_sort(group_info);
-#endif
-	set_groups(cred, group_info);"""
-if needle in c:
-    c = c.replace(needle, repl)
-    open(p, 'w').write(c)
-    print('[OK] groups_sort inlined for 4.4')
-else:
-    print('[WARN] groups_sort pattern not found')
-EOF
+          bash "$GITHUB_WORKSPACE/patch-ksu-v095-4.4.sh"
           echo "[+] KernelSU v0.9.5 integrated for 4.4"
 
       - name: Build kernel
