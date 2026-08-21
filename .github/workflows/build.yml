@@ -59,9 +59,9 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/toolchain/bin:$PATH"
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
-          # GCC10+ defaults to -fno-common, breaking old dtc (multiple definition of yylloc)
-          export HOSTCFLAGS="-fcommon"
           mkdir -p ../out
+          # GCC10+ defaults to -fno-common, breaking old dtc (multiple definition of yylloc)
+          sed -i 's/^HOSTCFLAGS_DTC := -I$(src) -I$(src)\/libfdt/HOSTCFLAGS_DTC := -fcommon -I$(src) -I$(src)\/libfdt/' scripts/dtc/Makefile
           make O=../out merge_hi6250_defconfig
           make O=../out -j$(nproc) Image.gz
 
