@@ -36,10 +36,12 @@ jobs:
       - name: Download aarch64-linux-android-4.9 toolchain
         run: |
           cd "$GITHUB_WORKSPACE"
-          git clone --depth 1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 \
-            toolchain 2>/dev/null || \
-          git clone --depth 1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain
+          curl -Ls -o toolchain.tar.gz \
+            "https://codeload.github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9/tar.gz/refs/heads/cm-14.1"
+          mkdir -p toolchain
+          tar -xzf toolchain.tar.gz -C toolchain --strip-components=1
           ls toolchain/bin/
+          ./toolchain/bin/aarch64-linux-android-gcc --version | head -1
 
       - name: Integrate SukiSU
         run: |
