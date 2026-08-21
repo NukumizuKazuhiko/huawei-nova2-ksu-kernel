@@ -17,43 +17,18 @@ jobs:
       - name: Download kernel source from Release
         run: |
           cd "$GITHUB_WORKSPACE"
-          gh release download "$RELEASE_TAG" --pattern "*.tar.gz" --dir . \
+          gh release download "$RELEASE_TAG" --pattern "kernel_4.4.23_v2.tar.gz" --dir . \
             --repo "${{ github.repository }}"
           mkdir -p src
-          tar -xzf kernel_*.tar.gz -C src
+          tar -xzf kernel_4.4.23_v2.tar.gz -C src
+          # package top dir is "newkernel"; normalize to "kernel"
+          if [ -d src/newkernel ] && [ ! -d src/kernel ]; then mv src/newkernel src/kernel; fi
           # Windows-created tarballs lose exec bits; restore them broadly
           find src -type f \( -name '*.sh' -o -name '*.pl' -o -name '*.py' -o -name 'gen_*' -o -name '*_gen_*' \) -exec chmod +x {} + 2>/dev/null || true
           find src/kernel/scripts src/kernel/arch -type f \( -name 'mk*' -o -name '*config' -o -name 'check*' -o -name 'build*' \) -exec chmod +x {} + 2>/dev/null || true
           chmod +x src/kernel/drivers/huawei_platform/oases/inlinehook_gen_off 2>/dev/null || true
-          # Huawei gutted/renamed some netfilter uapi headers; restore specific broken ones from upstream v4.4
-          # and fetch any still-missing canonical headers (keep Huawei-specific files intact)
-          mkdir -p src/kernel/include/uapi/linux/netfilter
-          for h in $(curl -Ls "https://api.github.com/repos/torvalds/linux/contents/include/uapi/linux/netfilter?ref=v4.4" | grep '"name"' | sed -E 's/.*"name": "([^"]+)".*/\1/' | grep '\.h$'); do
-            dst="src/kernel/include/uapi/linux/netfilter/$h"
-            # overwrite: known-broken stubs / missing files; keep Huawei-specific contents otherwise
-            case "$h" in
-              xt_connmark.h|xt_DSCP.h)
-                curl -Ls -o "$dst" "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/$h"
-                echo "[+] restored $h"
-                ;;
-              *)
-                if [ ! -f "$dst" ] || grep -q "include <linux/netfilter/$h>" "$dst" 2>/dev/null; then
-                  curl -Ls -o "$dst" "https://raw.githubusercontent.com/torvalds/linux/v4.4/include/uapi/linux/netfilter/$h"
-                  echo "[+] restored missing $h"
-                fi
-                ;;
-            esac
-          done
-          # create lowercase aliases for UPPERCASE-named headers (case-sensitive FS)
-          cd src/kernel/include/uapi/linux/netfilter
-          for f in xt_*.h; do
-            lc=$(echo "$f" | tr 'A-Z' 'a-z')
-            if [ "$f" != "$lc" ] && [ ! -e "$lc" ]; then
-              cp "$f" "$lc"
-              echo "[+] lowercase alias: $f -> $lc"
-            fi
-          done
-          cd "$GITHUB_WORKSPACE"
+          # (netfilter uapi headers already fixed in the release tarball)
+          echo "[+] kernel source ready"
           # Huawei renamed several netfilter uapi headers to UPPERCASE but .c files include lowercase;
           # create lowercase symlinks/copies so includes resolve on case-sensitive ext4
           cd src/kernel/include/uapi/linux/netfilter
@@ -98,8 +73,6 @@ jobs:
             echo "CONFIG_KSU=y" >> arch/arm64/configs/merge_hi6250_defconfig
           # apply 4.4 compatibility patch (script lives in repo root)
           bash "$GITHUB_WORKSPACE/patch-4.4.sh"
-          # Huawei source ships xt_dscp.c (match) but no xt_DSCP.c (target); disable target
-          sed -i 's/^CONFIG_NETFILTER_XT_TARGET_DSCP=y/# CONFIG_NETFILTER_XT_TARGET_DSCP is not set/' arch/arm64/configs/merge_hi6250_defconfig
           echo "[+] SukiSU integrated + patched for 4.4"
 
       - name: Build kernel
@@ -112,8 +85,6 @@ jobs:
           # GCC10+ defaults to -fno-common, breaking old dtc (multiple definition of yylloc)
           sed -i 's/^HOSTCFLAGS_DTC := -I$(src) -I$(src)\/libfdt/HOSTCFLAGS_DTC := -fcommon -I$(src) -I$(src)\/libfdt/' scripts/dtc/Makefile
           make O=../out merge_hi6250_defconfig
-          # Huawei dropped xt_DSCP.c (target); ensure it stays off in generated .config
-          ./scripts/config --file ../out/.config --disable NETFILTER_XT_TARGET_DSCP
           make O=../out -j$(nproc) Image.gz
 
       - name: Collect artifacts
