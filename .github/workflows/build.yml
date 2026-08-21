@@ -73,20 +73,26 @@ jobs:
           ls toolchain/bin/
           ./toolchain/bin/aarch64-linux-android-gcc --version | head -1
 
-      - name: Integrate SukiSU
+      - name: Integrate KernelSU v0.9.5
         run: |
           cd "$GITHUB_WORKSPACE/src/kernel"
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
-          # ensure defconfig has KPROBES + KSU (in case upstream defconfig differs)
+          # remove any kernelsu dir shipped inside the source tarball (SukiSU leftovers)
+          rm -rf drivers/kernelsu
+          # official KernelSU v0.9.5 - last version with old-kernel (4.4/Huawei hisi) support
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/v0.9.5/kernel/setup.sh" | bash -s v0.9.5
+          # ensure defconfig has KPROBES + KSU + OVERLAY_FS (in case upstream defconfig differs)
           grep -q "^CONFIG_KPROBES=y" arch/arm64/configs/merge_hi6250_defconfig || \
             sed -i 's/^# CONFIG_KPROBES is not set/CONFIG_KPROBES=y/' arch/arm64/configs/merge_hi6250_defconfig
           grep -q "^CONFIG_KSU=y" arch/arm64/configs/merge_hi6250_defconfig || \
             echo "CONFIG_KSU=y" >> arch/arm64/configs/merge_hi6250_defconfig
+          grep -q "^CONFIG_OVERLAY_FS=y" arch/arm64/configs/merge_hi6250_defconfig || \
+            echo "CONFIG_OVERLAY_FS=y" >> arch/arm64/configs/merge_hi6250_defconfig
           # Huawei ships xt_dscp.c (match) but Makefile also wants xt_DSCP.o (target, no source); disable it
           sed -i 's/^CONFIG_NETFILTER_XT_TARGET_DSCP=y/# CONFIG_NETFILTER_XT_TARGET_DSCP is not set/' arch/arm64/configs/merge_hi6250_defconfig
-          # apply 4.4 compatibility patch (script lives in repo root)
-          bash "$GITHUB_WORKSPACE/patch-4.4.sh"
-          echo "[+] SukiSU integrated + patched for 4.4"
+          # Huawei 4.4 has no current_security() macro; use current_cred()->security directly
+          sed -i 's/const struct task_security_struct \*tsec = current_security();/const struct task_security_struct *tsec = (const struct task_security_struct *)current_cred()->security;/' drivers/kernelsu/selinux/selinux.c
+          grep -q "current_cred()->security" drivers/kernelsu/selinux/selinux.c && echo "[OK] selinux current_security patched" || echo "[WARN] current_security patch did not apply"
+          echo "[+] KernelSU v0.9.5 integrated for 4.4"
 
       - name: Build kernel
         run: |
@@ -109,6 +115,26 @@ jobs:
           cp src/out/arch/arm64/boot/Image.gz dist/ 2>/dev/null || true
           cp src/out/arch/arm64/boot/zImage* dist/ 2>/dev/null || true
           ls -la dist/
+
+      - name: Build Android boot image
+        run: |
+          sudo apt-get install -y mkbootimg 2>/dev/null || pip3 install mkbootimg 2>/dev/null || true
+          cd "$GITHUB_WORKSPACE"
+          # Match original device boot image: page_size=2048, kernel_addr=0x480000, tags=0x1300000, ramdisk empty (separate partition)
+          if command -v mkbootimg >/dev/null 2>&1; then
+            mkbootimg \
+              --kernel dist/Image.gz \
+              --base 0x00000000 \
+              --kernel_offset 0x00480000 \
+              --tags_offset 0x01300000 \
+              --page_size 2048 \
+              --ramdisk dummy_ramdisk.img \
+              -o dist/boot.img
+          else
+            echo "mkbootimg not available" >&2
+            exit 1
+          fi
+          ls -la dist/boot.img
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
