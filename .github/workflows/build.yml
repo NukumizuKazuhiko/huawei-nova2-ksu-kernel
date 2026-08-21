@@ -64,6 +64,8 @@ jobs:
             echo "CONFIG_KSU=y" >> arch/arm64/configs/merge_hi6250_defconfig
           # apply 4.4 compatibility patch (script lives in repo root)
           bash "$GITHUB_WORKSPACE/patch-4.4.sh"
+          # Huawei source ships xt_dscp.c (match) but no xt_DSCP.c (target); disable target
+          sed -i 's/^CONFIG_NETFILTER_XT_TARGET_DSCP=y/# CONFIG_NETFILTER_XT_TARGET_DSCP is not set/' arch/arm64/configs/merge_hi6250_defconfig
           echo "[+] SukiSU integrated + patched for 4.4"
 
       - name: Build kernel
