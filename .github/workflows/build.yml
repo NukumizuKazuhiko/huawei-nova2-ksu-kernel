@@ -21,6 +21,9 @@ jobs:
             --repo "${{ github.repository }}"
           mkdir -p src
           tar -xzf kernel_*.tar.gz -C src
+          # Windows-created tarballs lose exec bits; restore them broadly
+          find src -type f \( -name '*.sh' -o -name '*.pl' -o -name '*.py' -o -name 'gen_*' \) -exec chmod +x {} + 2>/dev/null || true
+          find src/kernel/scripts src/kernel/arch -type f \( -name 'mk*' -o -name '*config' -o -name 'check*' -o -name 'build*' \) -exec chmod +x {} + 2>/dev/null || true
           ls -la src/kernel | head
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || 'v4.4.23-sukisu' }}
